@@ -1,8 +1,17 @@
 import { useState, useEffect } from "react";
 import { AuthProvider } from "./components/auth/auth-wrapper";
+import { OnboardingFlow } from "./components/onboarding-flow";
+import { WelcomeDashboard } from "./components/welcome-dashboard";
 import { Header } from "./components/header";
 import { Dashboard } from "./components/dashboard";
-import { ProblemCard, Problem } from "./components/problem-card";
+import { ConceptsHub } from "./components/concepts-hub";
+import { EnhancedLearningPaths } from "./components/enhanced-learning-paths";
+import { EnhancedPatternTracker } from "./components/enhanced-pattern-tracker";
+import { EnhancedCustomContent } from "./components/enhanced-custom-content";
+import { EnhancedProblemManager } from "./components/enhanced-problem-manager";
+import { OrganizationManager } from "./components/organization-manager";
+import { CommunityHub } from "./components/community-hub";
+import { AdvancedAnalytics } from "./components/advanced-analytics";
 import { AddProblemDialog } from "./components/add-problem-dialog";
 import { ReviewSystem } from "./components/review-system";
 import { Button } from "./components/ui/button";
@@ -11,12 +20,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { Badge } from "./components/ui/badge";
 import { Card, CardContent } from "./components/ui/card";
-import { Search, Filter, Grid, List, Flame, Loader2, AlertCircle, Plus } from "lucide-react";
+import { Flame, Loader2, AlertCircle, Plus, Brain, BookOpen, Target, FileText, Home, Users, Globe, Building2, BarChart3, Grid, Filter } from "lucide-react";
 import { Toaster, toast } from "sonner@2.0.3";
 import { 
   getProblems, 
   createProblem, 
   updateProblem, 
+  deleteProblem,
   getHeatmapData, 
   getDashboardStats,
   Problem as ApiProblem,
@@ -24,24 +34,61 @@ import {
   DashboardStats
 } from "./utils/api";
 
+interface UserPreferences {
+  name: string;
+  experience: string;
+  platforms: string[];
+  goals: string[];
+  studySchedule: string;
+  preferredTopics: string[];
+  motivations: string[];
+  customGoal?: string;
+}
+
 function AppContent() {
   const [problems, setProblems] = useState<ApiProblem[]>([]);
   const [heatmapData, setHeatmapData] = useState<HeatmapData[]>([]);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [addProblemOpen, setAddProblemOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("dashboard");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [filterDifficulty, setFilterDifficulty] = useState<string>("all");
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [sortBy, setSortBy] = useState<string>("recent");
+  const [activeTab, setActiveTab] = useState("home");
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Onboarding and user preferences
+  const [isOnboardingComplete, setIsOnboardingComplete] = useState(false);
+  const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
-  // Load initial data
+  // Check if user has completed onboarding
   useEffect(() => {
-    loadData();
+    const savedPreferences = localStorage.getItem('codeTracPreferences');
+    const onboardingCompleted = localStorage.getItem('codeTracOnboardingComplete');
+    
+    if (savedPreferences && onboardingCompleted === 'true') {
+      setUserPreferences(JSON.parse(savedPreferences));
+      setIsOnboardingComplete(true);
+      loadData();
+    } else {
+      setShowOnboarding(true);
+      setLoading(false);
+    }
   }, []);
+
+  const handleOnboardingComplete = (preferences: UserPreferences) => {
+    setUserPreferences(preferences);
+    setIsOnboardingComplete(true);
+    setShowOnboarding(false);
+    
+    // Save to localStorage
+    localStorage.setItem('codeTracPreferences', JSON.stringify(preferences));
+    localStorage.setItem('codeTracOnboardingComplete', 'true');
+    
+    // Load app data
+    loadData();
+    
+    toast.success(`Welcome to CodeTrac, ${preferences.name}! 🎉`);
+  };
 
   const loadData = async () => {
     try {
@@ -159,41 +206,145 @@ function AppContent() {
     toast.success("Problem added to review queue");
   };
 
-  const filteredProblems = problems.filter(problem => {
-    const matchesSearch = problem.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         problem.platform.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         problem.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
-    
-    const matchesStatus = filterStatus === "all" || problem.status === filterStatus;
-    const matchesDifficulty = filterDifficulty === "all" || problem.difficulty === filterDifficulty;
-    
-    return matchesSearch && matchesStatus && matchesDifficulty;
-  });
-
-  const sortedProblems = [...filteredProblems].sort((a, b) => {
-    switch (sortBy) {
-      case "recent":
-        const dateA = a.solvedAt || a.reviewDate || "0";
-        const dateB = b.solvedAt || b.reviewDate || "0";
-        return new Date(dateB).getTime() - new Date(dateA).getTime();
-      case "difficulty":
-        const difficultyOrder = { "Easy": 1, "Medium": 2, "Hard": 3 };
-        return difficultyOrder[b.difficulty] - difficultyOrder[a.difficulty];
-      case "alphabetical":
-        return a.title.localeCompare(b.title);
-      case "rating":
-        return (b.rating || 0) - (a.rating || 0);
-      default:
-        return 0;
+  const handleDeleteProblem = async (id: string) => {
+    try {
+      const response = await deleteProblem(id);
+      
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to delete problem');
+      }
+      
+      setProblems(prev => prev.filter(problem => problem.id !== id));
+      toast.success("Problem deleted successfully!");
+      
+      // Refresh dashboard stats
+      const statsResponse = await getDashboardStats();
+      if (statsResponse.success) {
+        setDashboardStats(statsResponse.data!);
+      }
+      
+      // Refresh heatmap data
+      const heatmapResponse = await getHeatmapData();
+      if (heatmapResponse.success) {
+        setHeatmapData(heatmapResponse.data!);
+      }
+    } catch (error) {
+      console.error('Error deleting problem:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to delete problem');
     }
-  });
+  };
+
+  const handleBulkDelete = async (problemIds: string[]) => {
+    try {
+      const deletePromises = problemIds.map(id => deleteProblem(id));
+      const responses = await Promise.all(deletePromises);
+      
+      const failed = responses.filter(r => !r.success);
+      if (failed.length > 0) {
+        throw new Error(`Failed to delete ${failed.length} problems`);
+      }
+      
+      setProblems(prev => prev.filter(problem => !problemIds.includes(problem.id)));
+      toast.success(`${problemIds.length} problems deleted successfully!`);
+      
+      // Refresh stats and heatmap
+      const [statsResponse, heatmapResponse] = await Promise.all([
+        getDashboardStats(),
+        getHeatmapData()
+      ]);
+      
+      if (statsResponse.success) {
+        setDashboardStats(statsResponse.data!);
+      }
+      if (heatmapResponse.success) {
+        setHeatmapData(heatmapResponse.data!);
+      }
+    } catch (error) {
+      console.error('Error bulk deleting problems:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to delete problems');
+    }
+  };
+
+  const handleBulkUpdate = async (problemIds: string[], updates: Partial<ApiProblem>) => {
+    try {
+      const updatePromises = problemIds.map(id => updateProblem(id, updates));
+      const responses = await Promise.all(updatePromises);
+      
+      const failed = responses.filter(r => !r.success);
+      if (failed.length > 0) {
+        throw new Error(`Failed to update ${failed.length} problems`);
+      }
+      
+      setProblems(prev => prev.map(problem => 
+        problemIds.includes(problem.id) 
+          ? { ...problem, ...updates, updatedAt: new Date().toISOString() }
+          : problem
+      ));
+      
+      toast.success(`${problemIds.length} problems updated successfully!`);
+      
+      // Refresh stats if status was changed
+      if (updates.status) {
+        const [statsResponse, heatmapResponse] = await Promise.all([
+          getDashboardStats(),
+          getHeatmapData()
+        ]);
+        
+        if (statsResponse.success) {
+          setDashboardStats(statsResponse.data!);
+        }
+        if (heatmapResponse.success) {
+          setHeatmapData(heatmapResponse.data!);
+        }
+      }
+    } catch (error) {
+      console.error('Error bulk updating problems:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update problems');
+    }
+  };
+
+  const handleStartAction = (action: string) => {
+    switch (action) {
+      case 'add-problem':
+        setAddProblemOpen(true);
+        break;
+      case 'create-note':
+        setActiveTab('notes');
+        break;
+      case 'explore-patterns':
+        setActiveTab('patterns');
+        break;
+      case 'browse-learning':
+        setActiveTab('learning');
+        break;
+      default:
+        break;
+    }
+  };
+
+  const handleResetApp = () => {
+    setIsOnboardingComplete(false);
+    setUserPreferences(null);
+    setShowOnboarding(true);
+    setActiveTab("home");
+    setProblems([]);
+    setHeatmapData([]);
+    setDashboardStats(null);
+  };
+
+
+
+  // Show onboarding flow for new users
+  if (showOnboarding) {
+    return <OnboardingFlow onComplete={handleOnboardingComplete} />;
+  }
 
   if (loading) {
     return (
       <div className="min-h-screen bg-background text-foreground font-mono flex items-center justify-center">
         <div className="text-center space-y-4">
           <Loader2 className="h-8 w-8 animate-spin text-catppuccin-blue mx-auto" />
-          <p className="text-catppuccin-overlay1">Loading your CodeTrac data...</p>
+          <p className="text-catppuccin-overlay1">Loading your CodeTrac workspace...</p>
         </div>
       </div>
     );
@@ -219,11 +370,19 @@ function AppContent() {
     );
   }
 
+  const appStats = {
+    totalProblems: problems.length,
+    solvedProblems: problems.filter(p => p.status === 'Solved').length,
+    currentStreak: dashboardStats?.currentStreak || 0,
+    notesCount: 3 // This would come from notes data in real implementation
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground font-mono">
       <Header 
         onAddProblem={() => setAddProblemOpen(true)}
         onShowReview={() => setActiveTab("review")}
+        onResetApp={handleResetApp}
         stats={{
           totalSolved: dashboardStats?.solvedProblems || 0,
           currentStreak: dashboardStats?.currentStreak || 0,
@@ -232,29 +391,124 @@ function AppContent() {
       
       <div className="max-w-7xl mx-auto p-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="bg-catppuccin-surface0 border border-catppuccin-surface1">
-            <TabsTrigger 
-              value="dashboard" 
-              className="data-[state=active]:bg-catppuccin-blue data-[state=active]:text-catppuccin-surface0"
-            >
-              <Flame className="h-4 w-4 mr-2" />
-              Dashboard
-            </TabsTrigger>
-            <TabsTrigger 
-              value="problems"
-              className="data-[state=active]:bg-catppuccin-blue data-[state=active]:text-catppuccin-surface0"
-            >
-              <Grid className="h-4 w-4 mr-2" />
-              Problems
-            </TabsTrigger>
-            <TabsTrigger 
-              value="review"
-              className="data-[state=active]:bg-catppuccin-blue data-[state=active]:text-catppuccin-surface0"
-            >
-              <Filter className="h-4 w-4 mr-2" />
-              Review System
-            </TabsTrigger>
+          <TabsList className="bg-catppuccin-surface0 border border-catppuccin-surface1 w-full overflow-x-auto">
+            <div className="flex space-x-1 min-w-max">
+              <TabsTrigger 
+                value="home" 
+                className="data-[state=active]:bg-catppuccin-blue data-[state=active]:text-catppuccin-surface0 flex-shrink-0"
+              >
+                <Home className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">Home</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="concepts" 
+                className="data-[state=active]:bg-catppuccin-blue data-[state=active]:text-catppuccin-surface0 flex-shrink-0"
+              >
+                <Brain className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">Concepts</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="learning" 
+                className="data-[state=active]:bg-catppuccin-blue data-[state=active]:text-catppuccin-surface0 flex-shrink-0"
+              >
+                <BookOpen className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">Learning</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="patterns" 
+                className="data-[state=active]:bg-catppuccin-blue data-[state=active]:text-catppuccin-surface0 flex-shrink-0"
+              >
+                <Target className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">Patterns</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="notes" 
+                className="data-[state=active]:bg-catppuccin-blue data-[state=active]:text-catppuccin-surface0 flex-shrink-0"
+              >
+                <FileText className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">Notes</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="dashboard"
+                className="data-[state=active]:bg-catppuccin-blue data-[state=active]:text-catppuccin-surface0 flex-shrink-0"
+              >
+                <Flame className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">Analytics</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="problems"
+                className="data-[state=active]:bg-catppuccin-blue data-[state=active]:text-catppuccin-surface0 flex-shrink-0"
+              >
+                <Grid className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">Problems</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="review"
+                className="data-[state=active]:bg-catppuccin-blue data-[state=active]:text-catppuccin-surface0 flex-shrink-0"
+              >
+                <Filter className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">Review</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="community"
+                className="data-[state=active]:bg-catppuccin-blue data-[state=active]:text-catppuccin-surface0 flex-shrink-0"
+              >
+                <Globe className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">Community</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="organizations"
+                className="data-[state=active]:bg-catppuccin-blue data-[state=active]:text-catppuccin-surface0 flex-shrink-0"
+              >
+                <Building2 className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">Teams</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="analytics"
+                className="data-[state=active]:bg-catppuccin-blue data-[state=active]:text-catppuccin-surface0 flex-shrink-0"
+              >
+                <BarChart3 className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">Insights</span>
+              </TabsTrigger>
+            </div>
           </TabsList>
+
+          <TabsContent value="home" className="space-y-6">
+            <WelcomeDashboard
+              userName={userPreferences?.name || 'User'}
+              userPreferences={userPreferences}
+              onStartAction={handleStartAction}
+              onAddProblem={() => setAddProblemOpen(true)}
+              stats={appStats}
+            />
+          </TabsContent>
+
+          <TabsContent value="concepts" className="space-y-6">
+            <ConceptsHub 
+              problems={problems}
+              onAddProblem={() => setAddProblemOpen(true)}
+            />
+          </TabsContent>
+
+          <TabsContent value="learning" className="space-y-6">
+            <EnhancedLearningPaths 
+              problems={problems}
+              onAddProblem={() => setAddProblemOpen(true)}
+            />
+          </TabsContent>
+
+          <TabsContent value="patterns" className="space-y-6">
+            <EnhancedPatternTracker 
+              problems={problems}
+              onAddProblem={() => setAddProblemOpen(true)}
+            />
+          </TabsContent>
+
+          <TabsContent value="notes" className="space-y-6">
+            <EnhancedCustomContent 
+              onAddProblem={() => setAddProblemOpen(true)}
+            />
+          </TabsContent>
 
           <TabsContent value="dashboard" className="space-y-6">
             <Dashboard 
@@ -266,140 +520,43 @@ function AppContent() {
           </TabsContent>
 
           <TabsContent value="problems" className="space-y-6">
-            {/* Filters and Search */}
-            <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row gap-4">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-catppuccin-overlay1" />
-                  <Input
-                    placeholder="Search problems, platforms, or tags..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 bg-catppuccin-surface1 border-catppuccin-surface2"
-                  />
-                </div>
-                
-                <div className="flex space-x-2">
-                  <Select value={filterStatus} onValueChange={setFilterStatus}>
-                    <SelectTrigger className="w-32 bg-catppuccin-surface1 border-catppuccin-surface2">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-catppuccin-surface1 border-catppuccin-surface2">
-                      <SelectItem value="all">All Status</SelectItem>
-                      <SelectItem value="Solved">Solved</SelectItem>
-                      <SelectItem value="Attempted">Attempted</SelectItem>
-                      <SelectItem value="To Review">To Review</SelectItem>
-                      <SelectItem value="Unsolved">Unsolved</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <Select value={filterDifficulty} onValueChange={setFilterDifficulty}>
-                    <SelectTrigger className="w-32 bg-catppuccin-surface1 border-catppuccin-surface2">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-catppuccin-surface1 border-catppuccin-surface2">
-                      <SelectItem value="all">All Levels</SelectItem>
-                      <SelectItem value="Easy">Easy</SelectItem>
-                      <SelectItem value="Medium">Medium</SelectItem>
-                      <SelectItem value="Hard">Hard</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <Select value={sortBy} onValueChange={setSortBy}>
-                    <SelectTrigger className="w-36 bg-catppuccin-surface1 border-catppuccin-surface2">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-catppuccin-surface1 border-catppuccin-surface2">
-                      <SelectItem value="recent">Recent</SelectItem>
-                      <SelectItem value="difficulty">Difficulty</SelectItem>
-                      <SelectItem value="alphabetical">A-Z</SelectItem>
-                      <SelectItem value="rating">Rating</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setViewMode(viewMode === "grid" ? "list" : "grid")}
-                    className="border-catppuccin-surface2 hover:bg-catppuccin-surface1"
-                  >
-                    {viewMode === "grid" ? <List className="h-4 w-4" /> : <Grid className="h-4 w-4" />}
-                  </Button>
-                </div>
-              </div>
-
-              {/* Results Summary */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <Badge variant="outline" className="border-catppuccin-surface2">
-                    {sortedProblems.length} problems
-                  </Badge>
-                  {searchQuery && (
-                    <Badge variant="secondary" className="bg-catppuccin-surface1">
-                      Searching: "{searchQuery}"
-                    </Badge>
-                  )}
-                  {filterStatus !== "all" && (
-                    <Badge variant="secondary" className="bg-catppuccin-surface1">
-                      Status: {filterStatus}
-                    </Badge>
-                  )}
-                  {filterDifficulty !== "all" && (
-                    <Badge variant="secondary" className="bg-catppuccin-surface1">
-                      Difficulty: {filterDifficulty}
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Problems Grid */}
-            <div className={
-              viewMode === "grid" 
-                ? "grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6"
-                : "space-y-4"
-            }>
-              {sortedProblems.length === 0 ? (
-                <div className="col-span-full text-center py-12 text-catppuccin-overlay1">
-                  {problems.length === 0 ? (
-                    <>
-                      <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <h3 className="text-lg font-semibold mb-2">No problems yet</h3>
-                      <p className="mb-4">Start tracking your competitive programming journey!</p>
-                      <Button 
-                        onClick={() => setAddProblemOpen(true)}
-                        className="bg-catppuccin-blue hover:bg-catppuccin-blue/80 text-catppuccin-surface0"
-                      >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Your First Problem
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <h3 className="text-lg font-semibold mb-2">No problems found</h3>
-                      <p>Try adjusting your search or filters</p>
-                    </>
-                  )}
-                </div>
-              ) : (
-                sortedProblems.map((problem) => (
-                  <ProblemCard
-                    key={problem.id}
-                    problem={problem}
-                    onStatusChange={handleStatusChange}
-                    onToggleFavorite={handleToggleFavorite}
-                    onAddReview={handleAddReview}
-                  />
-                ))
-              )}
-            </div>
+            <EnhancedProblemManager
+              problems={problems}
+              onAddProblem={() => setAddProblemOpen(true)}
+              onUpdateProblem={handleUpdateProblem}
+              onDeleteProblem={handleDeleteProblem}
+              onBulkUpdate={handleBulkUpdate}
+              onBulkDelete={handleBulkDelete}
+              onStatusChange={handleStatusChange}
+              onToggleFavorite={handleToggleFavorite}
+              onAddReview={handleAddReview}
+            />
           </TabsContent>
 
           <TabsContent value="review" className="space-y-6">
             <ReviewSystem 
               problems={problems}
               onUpdateProblem={handleUpdateProblem}
+            />
+          </TabsContent>
+
+          <TabsContent value="community" className="space-y-6">
+            <CommunityHub 
+              problems={problems}
+              currentUserId="current-user-id"
+            />
+          </TabsContent>
+
+          <TabsContent value="organizations" className="space-y-6">
+            <OrganizationManager 
+              problems={problems}
+              currentUserId="current-user-id"
+            />
+          </TabsContent>
+
+          <TabsContent value="analytics" className="space-y-6">
+            <AdvancedAnalytics 
+              problems={problems}
             />
           </TabsContent>
         </Tabs>

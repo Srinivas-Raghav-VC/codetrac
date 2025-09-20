@@ -8,13 +8,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Badge } from "./ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Separator } from "./ui/separator";
-import { X, Plus, ExternalLink, Download } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { X, Plus, ExternalLink, Download, BookOpen } from "lucide-react";
 import { Problem } from "./problem-card";
+import { StructuredJournal } from "./structured-journal";
 
 interface AddProblemDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAddProblem: (problem: Omit<Problem, 'id'>) => void;
+}
+
+interface JournalMetadata {
+  mistakeType: string;
+  confidenceLevel: string;
+  timeSpent: string;
+  difficultyPerception: string;
+  keyInsights: string;
+  nextSteps: string;
 }
 
 interface FetchedProblem {
@@ -34,8 +45,17 @@ export function AddProblemDialog({ open, onOpenChange, onAddProblem }: AddProble
   const [tags, setTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState("");
   const [notes, setNotes] = useState("");
+  const [journalMetadata, setJournalMetadata] = useState<JournalMetadata>({
+    mistakeType: '',
+    confidenceLevel: '',
+    timeSpent: '',
+    difficultyPerception: '',
+    keyInsights: '',
+    nextSteps: ''
+  });
   const [fetchedProblem, setFetchedProblem] = useState<FetchedProblem | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState("basic");
 
   const fetchProblemFromAPI = async (url: string): Promise<FetchedProblem | null> => {
     try {
@@ -97,8 +117,25 @@ export function AddProblemDialog({ open, onOpenChange, onAddProblem }: AddProble
     setTags(tags.filter(tag => tag !== tagToRemove));
   };
 
+  const handleNotesChange = (newNotes: string, metadata: JournalMetadata) => {
+    setNotes(newNotes);
+    setJournalMetadata(metadata);
+  };
+
   const handleSubmit = () => {
     if (!title || !platform || !url) return;
+
+    // Combine notes with journal metadata for structured storage
+    let combinedNotes = notes;
+    if (journalMetadata.mistakeType || journalMetadata.confidenceLevel || journalMetadata.keyInsights) {
+      combinedNotes += "\n\n--- Structured Reflection ---\n";
+      if (journalMetadata.mistakeType) combinedNotes += `Mistake Type: ${journalMetadata.mistakeType}\n`;
+      if (journalMetadata.confidenceLevel) combinedNotes += `Confidence: ${journalMetadata.confidenceLevel}\n`;
+      if (journalMetadata.timeSpent) combinedNotes += `Time Spent: ${journalMetadata.timeSpent}\n`;
+      if (journalMetadata.difficultyPerception) combinedNotes += `Difficulty Perception: ${journalMetadata.difficultyPerception}\n`;
+      if (journalMetadata.keyInsights) combinedNotes += `Key Insights: ${journalMetadata.keyInsights}\n`;
+      if (journalMetadata.nextSteps) combinedNotes += `Next Steps: ${journalMetadata.nextSteps}\n`;
+    }
 
     const problem: Omit<Problem, 'id'> = {
       title,
@@ -108,7 +145,7 @@ export function AddProblemDialog({ open, onOpenChange, onAddProblem }: AddProble
       url,
       status: 'Unsolved',
       tags,
-      notes: notes || undefined,
+      notes: combinedNotes || undefined,
     };
 
     onAddProblem(problem);
@@ -122,7 +159,16 @@ export function AddProblemDialog({ open, onOpenChange, onAddProblem }: AddProble
     setTags([]);
     setNewTag("");
     setNotes("");
+    setJournalMetadata({
+      mistakeType: '',
+      confidenceLevel: '',
+      timeSpent: '',
+      difficultyPerception: '',
+      keyInsights: '',
+      nextSteps: ''
+    });
     setFetchedProblem(null);
+    setActiveTab("basic");
     onOpenChange(false);
   };
 
@@ -136,31 +182,48 @@ export function AddProblemDialog({ open, onOpenChange, onAddProblem }: AddProble
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6">
-          {/* URL Input and Fetch */}
-          <div className="space-y-2">
-            <Label htmlFor="url" className="text-catppuccin-overlay2">Problem URL</Label>
-            <div className="flex space-x-2">
-              <Input
-                id="url"
-                placeholder="https://codeforces.com/problem/1234/A"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                className="bg-catppuccin-surface1 border-catppuccin-surface2 text-catppuccin-foreground"
-              />
-              <Button
-                onClick={handleFetchProblem}
-                disabled={!url || isLoading}
-                className="bg-catppuccin-blue hover:bg-catppuccin-blue/80 text-catppuccin-surface0"
-              >
-                {isLoading ? (
-                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-catppuccin-surface0 border-t-transparent" />
-                ) : (
-                  <Download className="h-4 w-4" />
-                )}
-              </Button>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+          <TabsList className="bg-catppuccin-surface1 border border-catppuccin-surface2 w-full">
+            <TabsTrigger 
+              value="basic" 
+              className="data-[state=active]:bg-catppuccin-blue data-[state=active]:text-catppuccin-surface0 flex-1"
+            >
+              Problem Details
+            </TabsTrigger>
+            <TabsTrigger 
+              value="journal"
+              className="data-[state=active]:bg-catppuccin-blue data-[state=active]:text-catppuccin-surface0 flex-1"
+            >
+              <BookOpen className="h-4 w-4 mr-2" />
+              Structured Reflection
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="basic" className="space-y-6">
+            {/* URL Input and Fetch */}
+            <div className="space-y-2">
+              <Label htmlFor="url" className="text-catppuccin-overlay2">Problem URL</Label>
+              <div className="flex space-x-2">
+                <Input
+                  id="url"
+                  placeholder="https://codeforces.com/problem/1234/A"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  className="bg-catppuccin-surface1 border-catppuccin-surface2 text-catppuccin-foreground"
+                />
+                <Button
+                  onClick={handleFetchProblem}
+                  disabled={!url || isLoading}
+                  className="bg-catppuccin-blue hover:bg-catppuccin-blue/80 text-catppuccin-surface0"
+                >
+                  {isLoading ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-catppuccin-surface0 border-t-transparent" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
             </div>
-          </div>
 
           {/* Fetched Problem Preview */}
           {fetchedProblem && (
@@ -307,20 +370,31 @@ export function AddProblemDialog({ open, onOpenChange, onAddProblem }: AddProble
             </div>
           </div>
 
-          {/* Notes */}
-          <div className="space-y-2">
-            <Label htmlFor="notes" className="text-catppuccin-overlay2">Notes (Optional)</Label>
-            <Textarea
-              id="notes"
-              placeholder="Add any notes about this problem..."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="bg-catppuccin-surface1 border-catppuccin-surface2 text-catppuccin-foreground min-h-[80px]"
-            />
-          </div>
+            {/* Basic Notes */}
+            <div className="space-y-2">
+              <Label htmlFor="notes" className="text-catppuccin-overlay2">Quick Notes (Optional)</Label>
+              <Textarea
+                id="notes"
+                placeholder="Add any quick notes about this problem..."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="bg-catppuccin-surface1 border-catppuccin-surface2 text-catppuccin-foreground min-h-[60px]"
+              />
+              <p className="text-xs text-catppuccin-overlay1">
+                For detailed reflection and learning insights, use the "Structured Reflection" tab
+              </p>
+            </div>
+          </TabsContent>
 
-          {/* Actions */}
-          <div className="flex justify-end space-x-2">
+          <TabsContent value="journal" className="space-y-4">
+            <StructuredJournal 
+              initialNotes={notes}
+              onNotesChange={handleNotesChange}
+            />
+          </TabsContent>
+
+          {/* Actions - Outside tabs so always visible */}
+          <div className="flex justify-end space-x-2 pt-4 border-t border-catppuccin-surface2">
             <Button
               variant="outline"
               onClick={() => onOpenChange(false)}
@@ -336,7 +410,7 @@ export function AddProblemDialog({ open, onOpenChange, onAddProblem }: AddProble
               Add Problem
             </Button>
           </div>
-        </div>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );

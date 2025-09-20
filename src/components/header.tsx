@@ -1,12 +1,14 @@
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu";
-import { Plus, Trophy, Target, Calendar, User, LogOut } from "lucide-react";
+import { ResetOnboarding } from "./reset-onboarding";
+import { Plus, Trophy, Target, Calendar, User, LogOut, Settings } from "lucide-react";
 import { useAuth } from "./auth/auth-wrapper";
 
 interface HeaderProps {
   onAddProblem: () => void;
   onShowReview: () => void;
+  onResetApp?: () => void;
   stats?: {
     totalSolved: number;
     currentStreak: number;
@@ -14,7 +16,7 @@ interface HeaderProps {
   };
 }
 
-export function Header({ onAddProblem, onShowReview, stats }: HeaderProps) {
+export function Header({ onAddProblem, onShowReview, onResetApp, stats }: HeaderProps) {
   const { user, signOut } = useAuth();
   return (
     <div className="border-b border-catppuccin-surface1 bg-catppuccin-surface0 p-6">
@@ -47,6 +49,7 @@ export function Header({ onAddProblem, onShowReview, stats }: HeaderProps) {
           </div>
           
           <div className="flex items-center space-x-3">
+            {onResetApp && <ResetOnboarding onReset={onResetApp} />}
             <Button
               onClick={onShowReview}
               variant="outline"
